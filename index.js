@@ -9,12 +9,17 @@ const md5 = require('crypto-js/md5');
 const PORT = process.env.PORT || 3000;
 const MERCHANT_ID = process.env.MERCHANT_ID;
 const MERCHANT_SECRET = process.env.MERCHANT_SECRET;
+const DOMAIN = process.env.DOMAIN;
 
 console.log(MERCHANT_ID, MERCHANT_SECRET);
 
+// Middleware
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+
+// Serve static files from the 'public' directory
+app.use(express.static('public'));
 
 app.post('/initiate-payment', (req, res) => {
     try {
@@ -39,7 +44,7 @@ app.post('/initiate-payment', (req, res) => {
                 throw new Error(`Missing required field: ${field}`);
             }
         }
-
+        console.log(req.body);
         // Format the amount
         const amountFormatted = parseFloat(amount).toLocaleString('en-us', { minimumFractionDigits: 2 }).replaceAll(',', '');
         const hashedSecret = md5(MERCHANT_SECRET).toString().toUpperCase();
@@ -49,9 +54,9 @@ app.post('/initiate-payment', (req, res) => {
             sandbox: true,
             preapprove: true,
             merchant_id: MERCHANT_ID,
-            return_url: "http://localhost:3000/return",
-            cancel_url: "http://localhost:3000/cancel",
-            notify_url: "http://localhost:3000/notify",
+            return_url: `${DOMAIN}/return`,
+            cancel_url: `${DOMAIN}/cancel`,
+            notify_url: `${DOMAIN}/notify`,
             first_name,
             last_name,
             email,
@@ -65,7 +70,7 @@ app.post('/initiate-payment', (req, res) => {
             amount: amountFormatted,
             hash
         };
-
+        console.log(formData);
         res.json(formData);
     } catch (error) {
         console.error('Error in initiate-payment:', error);
@@ -84,7 +89,7 @@ app.post('/notify', (req, res) => {
         if (local_md5sig === md5sig && status_code == '2') {
             // Payment is successful, update your database
             console.log('Payment successful for order:', order_id);
-            // TODO: Update your database as payment success
+            console.log('Badu wada!')
         } else {
             // Payment verification failed
             console.log('Payment verification failed for order:', order_id);
