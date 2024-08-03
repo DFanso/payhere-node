@@ -1,76 +1,100 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto-js');
-const cors = require('cors');  // Import the cors package
+const cors = require('cors');
 const app = express();
+require('dotenv').config();
+const md5 = require('crypto-js/md5');
 
-const PORT = 3000;
-const MERCHANT_ID = '1227834';  // Replace with your actual sandbox Merchant ID
-const MERCHANT_SECRET = 'MTU3MjExNDk4ODIwNjAwMTYxNzAxMTgzMDk4MjM2NTc5MDk0MDUx';  // Replace with your actual sandbox Merchant Secret
+const PORT = process.env.PORT || 3000;
+const MERCHANT_ID = process.env.MERCHANT_ID;
+const MERCHANT_SECRET = process.env.MERCHANT_SECRET;
+
+console.log(MERCHANT_ID, MERCHANT_SECRET);
 
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 app.post('/initiate-payment', (req, res) => {
-    const {
-        first_name,
-        last_name,
-        email,
-        phone,
-        address,
-        city,
-        country,
-        order_id,
-        items,
-        currency,
-        amount
-    } = req.body;
+    try {
+        const {
+            first_name,
+            last_name,
+            email,
+            phone,
+            address,
+            city,
+            country,
+            order_id,
+            items,
+            currency,
+            amount
+        } = req.body;
 
-    const amountFormatted = parseFloat(amount).toFixed(2);
-    const hashedSecret = crypto.MD5(MERCHANT_SECRET).toString().toUpperCase();
-    const hash = crypto.MD5(MERCHANT_ID + order_id + amountFormatted + currency + hashedSecret).toString().toUpperCase();
+        // Validate required fields
+        const requiredFields = ['first_name', 'last_name', 'email', 'phone', 'address', 'city', 'country', 'order_id', 'items', 'currency', 'amount'];
+        for (const field of requiredFields) {
+            if (!req.body[field]) {
+                throw new Error(`Missing required field: ${field}`);
+            }
+        }
 
-    const formData = {
-        merchant_id: MERCHANT_ID,
-        return_url: "https://4ec7-112-134-198-64.ngrok-free.app/return",
-        cancel_url: "https://4ec7-112-134-198-64.ngrok-free.app/cancel",
-        notify_url: "https://4ec7-112-134-198-64.ngrok-free.app/notify",
-        first_name: first_name,
-        last_name: last_name,
-        email: email,
-        phone: phone,
-        address: address,
-        city: city,
-        country: country,
-        order_id: order_id,
-        items: items,
-        currency: currency,
-        amount: amountFormatted,
-        hash: hash
-    };
+        // Format the amount
+        const amountFormatted = parseFloat(amount).toLocaleString('en-us', { minimumFractionDigits: 2 }).replaceAll(',', '');
+        const hashedSecret = md5(MERCHANT_SECRET).toString().toUpperCase();
+        const hash = md5(MERCHANT_ID + order_id + amountFormatted + currency + hashedSecret).toString().toUpperCase();
 
-    res.json(formData);
+        const formData = {
+            sandbox: true,
+            preapprove: true,
+            merchant_id: MERCHANT_ID,
+            return_url: "http://localhost:3000/return",
+            cancel_url: "http://localhost:3000/cancel",
+            notify_url: "http://localhost:3000/notify",
+            first_name,
+            last_name,
+            email,
+            phone,
+            address,
+            city,
+            country,
+            order_id,
+            items,
+            currency,
+            amount: amountFormatted,
+            hash
+        };
+
+        res.json(formData);
+    } catch (error) {
+        console.error('Error in initiate-payment:', error);
+        res.status(400).json({ error: error.message });
+    }
 });
 
 app.post('/notify', (req, res) => {
-    const { merchant_id, order_id, payhere_amount, payhere_currency, status_code, md5sig } = req.body;
+    try {
+        const { merchant_id, order_id, payhere_amount, payhere_currency, status_code, md5sig } = req.body;
 
-    const local_md5sig = crypto.MD5(
-        `${MERCHANT_ID}${order_id}${payhere_amount}${payhere_currency}${status_code}${crypto.MD5(MERCHANT_SECRET).toString().toUpperCase()}`
-    ).toString().toUpperCase();
+        const local_md5sig = md5(
+            `${MERCHANT_ID}${order_id}${payhere_amount}${payhere_currency}${status_code}${md5(MERCHANT_SECRET).toString().toUpperCase()}`
+        ).toString().toUpperCase();
 
-    if (local_md5sig === md5sig && status_code == '2') {
-        // Payment is successful, update your database
-        console.log('Payment successful');
-        // TODO: Update your database as payment success
-    } else {
-        // Payment verification failed
-        console.log('Payment verification failed');
+        if (local_md5sig === md5sig && status_code == '2') {
+            // Payment is successful, update your database
+            console.log('Payment successful for order:', order_id);
+            // TODO: Update your database as payment success
+        } else {
+            // Payment verification failed
+            console.log('Payment verification failed for order:', order_id);
+        }
+
+        res.sendStatus(200);
+    } catch (error) {
+        console.error('Error in notify endpoint:', error);
+        res.sendStatus(500);
     }
-    console.log(status_code)
-
-    res.sendStatus(200);
 });
 
 app.listen(PORT, () => {
